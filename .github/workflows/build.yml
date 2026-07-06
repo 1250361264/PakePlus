@@ -83,15 +83,6 @@ jobs:
               if: ${{ matrix.enabled }}
               uses: actions/checkout@v3
 
-            - name: Check Tauri
-              if: ${{ matrix.enabled }}
-              shell: bash
-              run: |
-                  if [ -z "${{ secrets.TAURI_KEY_PASSWORD }}" ]; then
-                    echo "::error::TAURI_KEY_PASSWORD is required but not set."
-                    exit 1
-                  fi
-
             - name: Install rust target
               if: ${{ matrix.enabled }}
               run: rustup target add ${{ matrix.target }}
