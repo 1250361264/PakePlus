@@ -96,10 +96,10 @@ jobs:
               if: ${{ matrix.enabled }}
               run: rustup target add ${{ matrix.target }}
 
-            - uses: pnpm/action-setup@v3
+            - uses: pnpm/action-setup@v4
               if: ${{ matrix.enabled }}
               with:
-                  version: latest
+                  version: 10
 
             - name: Sync node version and setup cache
               if: ${{ matrix.enabled }}
@@ -195,7 +195,7 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - uses: pnpm/action-setup@v3
+            - uses: pnpm/action-setup@v4
               with:
                   version: 9
 
