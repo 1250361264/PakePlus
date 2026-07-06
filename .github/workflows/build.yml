@@ -115,14 +115,33 @@ jobs:
               if: ${{ matrix.enabled }}
               run: pnpm install
 
-            - name: import Apple Developer Certificate
-              if: ${{ matrix.enabled && matrix.platform == 'macos-latest'}}
+            - name: Detect Apple signing config
+              if: ${{ matrix.enabled && matrix.platform == 'macos-latest' }}
+              id: apple_signing
               env:
                   APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
                   APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
                   KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
               run: |
-                  echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+                  if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ] && [ -n "$KEYCHAIN_PASSWORD" ]; then
+                    echo "enabled=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "enabled=false" >> "$GITHUB_OUTPUT"
+                    echo "::warning::Apple signing secrets not configured, building without code signing."
+                  fi
+
+            - name: import Apple Developer Certificate
+              if: ${{ matrix.enabled && matrix.platform == 'macos-latest' && steps.apple_signing.outputs.enabled == 'true' }}
+              env:
+                  APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+                  APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+                  KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+              run: |
+                  echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+                  if [ ! -s certificate.p12 ]; then
+                    echo "::error::APPLE_CERTIFICATE is invalid or empty after base64 decode."
+                    exit 1
+                  fi
                   security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
                   security default-keychain -s build.keychain
                   security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
@@ -132,7 +151,7 @@ jobs:
                   security find-identity -v -p codesigning build.keychain
 
             - name: verify certificate
-              if: ${{ matrix.enabled && matrix.platform == 'macos-latest'}}
+              if: ${{ matrix.enabled && matrix.platform == 'macos-latest' && steps.apple_signing.outputs.enabled == 'true' }}
               run: |
                   CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
                   CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
