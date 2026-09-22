@@ -201,10 +201,13 @@ jobs:
                   VITE_FILE_LIMIT_NUMBER: ${{ secrets.VITE_FILE_LIMIT_NUMBER }}
                   VITE_LOCAL_RHEXE: ${{ secrets.VITE_LOCAL_RHEXE }}
               with:
-                  tagName: 'PakePlus-v__VERSION__'
-                  releaseName: 'PakePlus v__VERSION__'
-                  body_path: ./Note.md
-                  releaseDraft: true
+                  # Tag 必须等于构建分支名：服务端 PakeBuilderService 按分支名调用
+                  # GET /releases/tags/{tag} 查找 Release
+                  tagName: '${{ github.ref_name }}'
+                  releaseName: '${{ github.ref_name }}'
+                  releaseBody: 'Package for personal use only, please do not use for commercial purposes（打包仅限个人使用，请勿用于传播或商业用途）'
+                  # 必须为 false：/releases/tags/{tag} 接口查不到草稿状态的 Release
+                  releaseDraft: false
                   prerelease: false
                   args: ${{ matrix.args }}
 
@@ -238,10 +241,13 @@ jobs:
                   VITE_FILE_LIMIT_NUMBER: ${{ secrets.VITE_FILE_LIMIT_NUMBER }}
                   VITE_LOCAL_RHEXE: ${{ secrets.VITE_LOCAL_RHEXE }}
               with:
-                  tagName: 'PakePlus-v__VERSION__'
-                  releaseName: 'PakePlus v__VERSION__'
-                  body_path: ./Note.md
-                  releaseDraft: true
+                  # Tag 必须等于构建分支名：服务端 PakeBuilderService 按分支名调用
+                  # GET /releases/tags/{tag} 查找 Release
+                  tagName: '${{ github.ref_name }}'
+                  releaseName: '${{ github.ref_name }}'
+                  releaseBody: 'Package for personal use only, please do not use for commercial purposes（打包仅限个人使用，请勿用于传播或商业用途）'
+                  # 必须为 false：/releases/tags/{tag} 接口查不到草稿状态的 Release
+                  releaseDraft: false
                   prerelease: false
                   args: ${{ matrix.args }}
 
