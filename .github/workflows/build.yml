@@ -36,8 +36,6 @@ on:
 
 permissions:
     contents: write
-    pages: write
-    id-token: write
 
 concurrency:
     group: pages
@@ -247,55 +245,3 @@ jobs:
                   prerelease: false
                   args: ${{ matrix.args }}
 
-    deploy-pages:
-        needs: publish-tauri
-        # 仅在 main 分支上运行时构建文档站：PakePlus 应用生成的 pake-* 临时打包分支
-        # 快照里没有 scripts/gitpress.cjs，跳过文档步骤可让打包流水线整体变绿
-        if: ${{ github.ref == 'refs/heads/main' }}
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-
-            - uses: pnpm/action-setup@v4
-              with:
-                  version: 9
-
-            - name: Setup Node
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 24
-                  cache: pnpm
-
-            - name: Setup Pages
-              uses: actions/configure-pages@v4
-
-            - name: Install dependencies
-              run: pnpm install
-
-            - name: GitPress Config
-              run: node ./scripts/gitpress.cjs gitBase
-
-            - name: Build with VitePress
-              run: pnpm run docs:build
-
-            - name: Copy Static
-              run: node ./scripts/gitpress.cjs copyStatic
-
-            - name: Upload artifact
-              uses: actions/upload-pages-artifact@v3
-              with:
-                  path: docs/dist
-
-    deploy:
-        environment:
-            name: github-pages
-            url: ${{ steps.deployment.outputs.page_url }}
-        needs: deploy-pages
-        runs-on: ubuntu-latest
-        steps:
-            - name: Deploy to GitHub Pages
-              id: deployment
-              uses: actions/deploy-pages@v4
