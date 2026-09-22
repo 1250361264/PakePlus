@@ -249,6 +249,9 @@ jobs:
 
     deploy-pages:
         needs: publish-tauri
+        # 仅在 main 分支上运行时构建文档站：PakePlus 应用生成的 pake-* 临时打包分支
+        # 快照里没有 scripts/gitpress.cjs，跳过文档步骤可让打包流水线整体变绿
+        if: ${{ github.ref == 'refs/heads/main' }}
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
