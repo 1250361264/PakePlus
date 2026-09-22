@@ -81,7 +81,7 @@ jobs:
         steps:
             - name: Checkout
               if: ${{ matrix.enabled }}
-              uses: actions/checkout@v3
+              uses: actions/checkout@v4
 
             - name: Install rust target
               if: ${{ matrix.enabled }}
@@ -122,12 +122,22 @@ jobs:
                   APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
                   APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
                   KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+                  APPLE_ID: ${{ secrets.APPLE_ID }}
+                  APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
               run: |
-                  if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_CERTIFICATE_PASSWORD" ] && [ -n "$KEYCHAIN_PASSWORD" ]; then
+                  missing=()
+                  [ -z "$APPLE_CERTIFICATE" ] && missing+=(APPLE_CERTIFICATE)
+                  [ -z "$APPLE_CERTIFICATE_PASSWORD" ] && missing+=(APPLE_CERTIFICATE_PASSWORD)
+                  [ -z "$KEYCHAIN_PASSWORD" ] && missing+=(KEYCHAIN_PASSWORD)
+                  [ -z "$APPLE_ID" ] && missing+=(APPLE_ID)
+                  [ -z "$APPLE_PASSWORD" ] && missing+=(APPLE_PASSWORD)
+                  [ -z "$APPLE_TEAM_ID" ] && missing+=(APPLE_TEAM_ID)
+                  if [ ${#missing[@]} -eq 0 ]; then
                     echo "enabled=true" >> "$GITHUB_OUTPUT"
                   else
                     echo "enabled=false" >> "$GITHUB_OUTPUT"
-                    echo "::warning::Apple signing secrets not configured, building without code signing."
+                    echo "::warning::缺少 Apple 签名/公证 Secrets: ${missing[*]}。本次将构建未签名的 macOS 包；如需签名请在仓库 Settings > Secrets and variables > Actions 中补齐后再触发。"
                   fi
 
             - name: import Apple Developer Certificate
@@ -153,21 +163,62 @@ jobs:
             - name: verify certificate
               if: ${{ matrix.enabled && matrix.platform == 'macos-latest' && steps.apple_signing.outputs.enabled == 'true' }}
               run: |
-                  CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
-                  CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+                  CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" || true)
+                  if [ -z "$CERT_INFO" ]; then
+                    echo "::error::钥匙串中未找到 Developer ID Application 证书，请检查 APPLE_CERTIFICATE 是否为正确的 p12（需包含私钥），以及 APPLE_CERTIFICATE_PASSWORD 是否正确。"
+                    security find-identity -v -p codesigning build.keychain
+                    exit 1
+                  fi
+                  CERT_ID=$(echo "$CERT_INFO" | head -n1 | awk -F'"' '{print $2}')
                   echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
-                  echo "Certificate imported."
+                  echo "Certificate imported: $CERT_ID"
 
-            - uses: tauri-apps/tauri-action@v0
-              if: ${{ matrix.enabled }}
+            - name: Build and release (Apple signed)
+              if: ${{ matrix.enabled && steps.apple_signing.outputs.enabled == 'true' }}
+              uses: tauri-apps/tauri-action@v0
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   APPLE_ID: ${{ secrets.APPLE_ID }}
                   APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
                   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-                  APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-                  APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
                   APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
+                  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+                  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+                  VITE_GITHUB_DOMAIN: ${{ secrets.VITE_GITHUB_DOMAIN }}
+                  VITE_PAYJS_DOMAIN: ${{ secrets.VITE_PAYJS_DOMAIN }}
+                  VITE_PAYJS_MCHID: ${{ secrets.VITE_PAYJS_MCHID }}
+                  VITE_PAYJS_SIGN_KEY: ${{ secrets.VITE_PAYJS_SIGN_KEY }}
+                  VITE_YUNPAY_DOMAIN: ${{ secrets.VITE_YUNPAY_DOMAIN }}
+                  VITE_YUNPAY_MCHID: ${{ secrets.VITE_YUNPAY_MCHID }}
+                  VITE_YUNPAY_SIGN_KEY: ${{ secrets.VITE_YUNPAY_SIGN_KEY }}
+                  VITE_ZPAY_DOMAIN: ${{ secrets.VITE_ZPAY_DOMAIN }}
+                  VITE_ZPAY_MCHID: ${{ secrets.VITE_ZPAY_MCHID }}
+                  VITE_ZPAY_SIGN_KEY: ${{ secrets.VITE_ZPAY_SIGN_KEY }}
+                  VITE_GTAG_ID: ${{ secrets.VITE_GTAG_ID }}
+                  VITE_UPSTREAM_USER: ${{ secrets.VITE_UPSTREAM_USER }}
+                  VITE_WEB_BRANCH: ${{ secrets.VITE_WEB_BRANCH }}
+                  VITE_DEV_BRANCH: ${{ secrets.VITE_DEV_BRANCH }}
+                  VITE_MAIN_BRANCH: ${{ secrets.VITE_MAIN_BRANCH }}
+                  VITE_FILE_LIMIT_SIZE: ${{ secrets.VITE_FILE_LIMIT_SIZE }}
+                  VITE_FILE_LIMIT_NUMBER: ${{ secrets.VITE_FILE_LIMIT_NUMBER }}
+                  VITE_LOCAL_RHEXE: ${{ secrets.VITE_LOCAL_RHEXE }}
+              with:
+                  tagName: 'PakePlus-v__VERSION__'
+                  releaseName: 'PakePlus v__VERSION__'
+                  body_path: ./Note.md
+                  releaseDraft: true
+                  prerelease: false
+                  args: ${{ matrix.args }}
+
+            # 无签名模式：不导出任何 Apple 相关变量。
+            # 注意：tauri-bundler 只要发现 APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD
+            # 变量存在（即使是空字符串），就会尝试导入证书；空值会导致
+            # "SecKeychainItemImport: One or more parameters passed to a function were not valid."
+            - name: Build and release (unsigned)
+              if: ${{ matrix.enabled && steps.apple_signing.outputs.enabled != 'true' }}
+              uses: tauri-apps/tauri-action@v0
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
                   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
                   VITE_GITHUB_DOMAIN: ${{ secrets.VITE_GITHUB_DOMAIN }}
